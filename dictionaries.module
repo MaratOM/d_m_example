@@ -1,0 +1,368 @@
+<?php
+
+require_once('dictionaries.class.php');
+
+function dictionaries_menu() {
+  $items['dicts'] = array(
+    'title' => 'Vocabs',
+    //'page callback' => '_dictionaries_dicts',
+		'page callback' => '_dictionaries_dicts_film_dicts',		
+    'access arguments' => array('access content'), 		
+	  'type' => MENU_NORMAL_ITEM,
+  );
+	
+  $items['dicts/film-dicts/%lang'] = array(
+    'title' => 'By film',
+    'page callback' => '_dictionaries_dicts_film_dicts',		
+    'page arguments' => array(2),		
+    'access arguments' => array('access content'), 		
+	  'type' => MENU_DEFAULT_LOCAL_TASK,
+		'weight' => 0,		
+  );	
+	
+  $items['dicts/working-dict/%lang'] = array(
+    'title' => 'Working',
+    'page callback' => '_dictionaries_dicts_working_dict',
+    'page arguments' => array(2),		
+    'access arguments' => array('access content'), 		
+	  'type' => MENU_LOCAL_TASK,
+		'weight' => 1,
+  );
+	
+  $items['dicts/common-dict/%lang'] = array(
+    'title' => 'General',
+    'page callback' => '_dictionaries_dicts_common_dict',		
+    'page arguments' => array(2), 			
+    'access arguments' => array('access content'), 		
+	  'type' => MENU_LOCAL_TASK,
+		'weight' => 2,		
+  );	
+	
+  $items['dicts/vocabulary/help'] = array(
+    'title' => 'Help',
+    'page callback' => '_dictionaries_help',
+		'page arguments' => array(1),
+    'access arguments' => array('access content'), 		
+	  'type' => MENU_LOCAL_TASK,
+		'weight' => 3,		
+  );		
+
+	//Ajax Callbacks ====================	
+  $items['dictionaries/word/add/comment'] = array(
+    'page callback' => '_dictionaries_word_add_comment',
+    'access arguments' => array('access content'),
+	  'type' => MENU_CALLBACK,
+    'file' => 'dictionaries.ajax.inc',			
+  );
+	
+  $items['dictionaries/word/show/subtitle'] = array(
+    'page callback' => '_dictionaries_word_show_subtitle',
+    'access arguments' => array('access content'),
+	  'type' => MENU_CALLBACK,
+    'file' => 'dictionaries.ajax.inc',		
+  );
+	
+  $items['dictionaries/word/delete'] = array(
+    'page callback' => '_dictionaries_word_delete',
+    'access arguments' => array('access content'),
+	  'type' => MENU_CALLBACK,
+    'file' => 'dictionaries.ajax.inc',		
+  );
+
+  $items['dictionaries/dict/import'] = array(
+    'page callback' => '_dictionaries_dict_import',
+    'access arguments' => array('access content'),
+	  'type' => MENU_CALLBACK,
+    'file' => 'dictionaries.ajax.inc',		
+  );
+	
+  $items['dictionaries/dict/delete/%'] = array(
+    'page callback' => '_dictionaries_dict_delete',
+    'page arguments' => array(3),				
+    'access arguments' => array('access content'),
+	  'type' => MENU_CALLBACK,
+    'file' => 'dictionaries.ajax.inc',		
+  );
+	
+  $items['dictionaries/dict/load'] = array(
+    'page callback' => '_dictionaries_dictionary_output_ajax',
+    'access arguments' => array('access content'),
+	  'type' => MENU_CALLBACK,
+    'file' => 'dictionaries.ajax.inc',		
+  );
+	//END of Ajax Callbacks ====================
+	
+  return $items;	
+}
+
+function lang_to_arg($arg){
+	$existing_arg = arg(2);
+	return isset($existing_arg) ? $existing_arg : 1;
+}
+
+function dictionaries_token_info() {
+  $info['tokens']['user']['dict_lang_min_tid'] = array(
+    'name' => t('Language tid'),
+    'description' => t('Minimal tid for language of user dictionary'),
+  );
+
+  return $info;
+}
+
+function dictionaries_tokens($type, $tokens, array $data = array(), array $options = array()) {
+  $replacements = array();
+  if ($type == 'user') {
+    foreach ($tokens as $name => $original) {
+      switch ($name) {
+        case 'dict_lang_min_tid':
+          $replacements[$original] = _dictionaries_token_dict_lang_min_tid();
+          break;
+      }
+    }
+  }
+
+  return $replacements;	
+}
+
+function _dictionaries_token_dict_lang_min_tid() {
+	global $user;
+	
+	return db_query("SELECT DISTINCT ttd.tid
+                    FROM taxonomy_term_data AS ttd
+                    INNER JOIN field_data_field_movie_language AS fml
+                    ON ttd.tid = fml.field_movie_language_tid
+                    INNER JOIN field_data_field_dictionary_movie AS fdm
+                    ON fml.entity_id = fdm.field_dictionary_movie_nid								
+                    INNER JOIN node AS n
+                    ON fdm.entity_id = n.nid										
+                    WHERE ttd.vid = 2
+                    AND n.uid = :user_uid
+										ORDER BY ttd.tid ASC
+										LIMIT 0,1",
+									array(':user_uid' => $user->uid))
+								->fetchField();
+}
+
+function _dictionaries_dicts() {
+	drupal_goto('dicts/film-dicts/1');
+}
+
+function _dictionaries_dicts_common_dict($lang_tid = 1) {
+	if(user_is_logged_in()) {
+		_filmui_add_metatags(null, 'dictionaries_dicts_common_dict');
+		$dictionary = new CommonDictionary($lang_tid);
+		return $dictionary->dictionaryOutput();
+	}
+}
+
+function _dictionaries_dicts_film_dicts($lang_tid = 1) {
+	if(user_is_logged_in()) {
+		_filmui_add_metatags(null, 'dictionaries_dicts_film_dicts');
+		if($_GET['q'] == 'dicts') {
+			drupal_goto('dicts/film-dicts/' . _dictionaries_token_dict_lang_min_tid());
+		}
+		else {
+			$dictsList = new UserDictionariesList($lang_tid);
+			return $dictsList->dictionaryOutput();
+		}
+	}
+}
+
+function _dictionaries_dicts_working_dict($lang_tid = 1) {
+	if(user_is_logged_in()) {
+		_filmui_add_metatags(null, 'dictionaries_dicts_working_dict');
+		$dictionary = new WorkingDictionary($lang_tid);
+		return $dictionary->dictionaryOutput();
+	}	
+}
+
+function _dictionaries_dicts_languages_line($path) {
+	global $user;
+	
+	$result = db_query("SELECT DISTINCT ttd.tid, ttd.name, fm.uri
+									FROM taxonomy_term_data AS ttd
+									INNER JOIN field_data_field_movie_language AS fml
+									ON ttd.tid = fml.field_movie_language_tid
+									
+									INNER JOIN field_data_field_voc_language_image AS fvli
+									ON ttd.tid = fvli.entity_id
+									
+									INNER JOIN file_managed AS fm
+									ON fvli.field_voc_language_image_fid = fm.fid										
+									
+									INNER JOIN field_data_field_dictionary_movie AS fdm
+									ON fml.entity_id = fdm.field_dictionary_movie_nid								
+									INNER JOIN node AS n
+									ON fdm.entity_id = n.nid										
+									WHERE ttd.vid = 2
+									AND n.uid = :user_uid",
+									array(':user_uid' => $user->uid));
+
+	$languages_arr = array();											 
+	while($row = $result->fetchAssoc()) {
+		$languages_arr[] = l(theme('image', array('path' => $row['uri'], 'title' => $row['name'])), $path . $row['tid'], array('html' => TRUE));				
+	}
+	return theme('item_list', array('items' => $languages_arr, 'attributes' => array('class' => array('langs-line'))));	
+}
+
+function _dictionaries_out_dicts_links_create($word, $lang_from_tid, $lang_to, $out_dict) {
+	_dictionaries_out_dicts_links($word, $lang_tid, 'lingvo');
+}
+
+function _dictionaries_out_dicts_langs($word, $lang_from_tid, $lang_to, $return_urls = FALSE) {
+	$lang_from = _subtitles_language_code_by_tid($lang_from_tid);
+	
+	$out_dicts_links = array();	
+	$out_dicts = array();
+	$out_dicts_names = array('yandex','google','multitran','lingvo','dictionary','thefreedictionary');
+	foreach($out_dicts_names as $out_dict_name) {
+		$out_dicts[$out_dict_name] = new stdClass();
+		$out_dicts[$out_dict_name]->name = $out_dict_name;		
+			switch($out_dict_name) {
+				case 'yandex':
+					$out_dicts[$out_dict_name]->multi_lang = 'ru';	
+					$out_dicts[$out_dict_name]->langs = array('en','de','fr','es','it','uk');
+					break;
+				case 'google':
+					$out_dicts[$out_dict_name]->multi_lang = 1;	
+					$out_dicts[$out_dict_name]->langs = array();
+					break;					
+				case 'multitran':
+					$out_dicts[$out_dict_name]->multi_lang = 'ru';	
+					$out_dicts[$out_dict_name]->langs = array('en','de','fr','es','it','lv','et','ja');
+					break;					
+				case 'lingvo':
+					$out_dicts[$out_dict_name]->multi_lang = 1;	
+					$out_dicts[$out_dict_name]->langs = array('da','en','fi','fr','de','el','hu','it','pl','pt','ru','es','tr','uk','vi');
+					break;
+				case 'dictionary':
+					$out_dicts[$out_dict_name]->multi_lang = 0;	
+					$out_dicts[$out_dict_name]->langs = array('en');
+					break;					
+				case 'thefreedictionary':
+					$out_dicts[$out_dict_name]->multi_lang = 0;	
+					$out_dicts[$out_dict_name]->langs = array('en');
+					break;					
+			}
+		}	
+	
+		foreach($out_dicts as $dict_name => $dict_data) {
+			if($dict_data->multi_lang == 1) {
+				if((in_array($lang_from, $dict_data->langs) && in_array($lang_to, $dict_data->langs)) || empty($dict_data->langs)) {
+						$out_dicts_links[] = _dictionaries_out_dicts_links($word, $lang_from_tid, $lang_to, $dict_data->name, $return_urls);
+				}
+			}
+			else if(!is_numeric($dict_data->multi_lang)
+							&& ($dict_data->multi_lang == $lang_from || $dict_data->multi_lang == $lang_to)) {
+				if(in_array($lang_from, $dict_data->langs) || in_array($lang_to, $dict_data->langs)) {
+					$out_dicts_links[] = _dictionaries_out_dicts_links($word, $lang_from_tid, $lang_to, $dict_data->name, $return_urls);
+				}				
+				
+			}
+			else if(count($dict_data->langs) == 1 && $dict_data->langs[0] == $lang_from) {
+				$out_dicts_links[] = _dictionaries_out_dicts_links($word, $lang_from_tid, $lang_to, $dict_data->name, $return_urls);
+			}			
+		}
+
+	return $out_dicts_links;
+}
+
+function _dictionaries_out_dicts_links($word, $lang_from_tid, $lang_to, $out_dict, $return_urls = FALSE) {
+	$yandex_flag = $out_dict == 'yandex' ? 'yandex' : null;
+	$lang_from = _subtitles_language_code_by_tid($lang_from_tid, $yandex_flag);
+	switch ($out_dict) {
+		case 'yandex':
+			$link_url_start = 'http://lingvo.yandex.ru/';
+			$link_url_end = '/'. $lang_from .'/';			
+			break;		
+		case 'google':
+			switch($lang_to) {
+				case 'zh-hans':
+					$lang_to = 'zh-CN';
+					break;
+				case 'zh-hant':
+					$lang_to = 'zh-TW';
+					break;					
+			}
+			$link_url_start = 'http://translate.google.com/#' . $lang_from . '|'. $lang_to .'|';
+			$link_url_end = '';
+			break;
+		case 'multitran':
+			$lang_from = _dictionaries_dict_multitran_encode($lang_from);
+			$lang_to = _dictionaries_dict_multitran_encode($lang_to);
+			
+			$link_url_start = 'http://multitran.ru/c/m.exe?l1=' . $lang_from . '&l2=' . $lang_to . '&s=';
+			$link_url_end = '';			
+			break;
+		case 'lingvo':
+			$lang_to = $lang_to == 'pt' ? 'ptbr' : $lang_to;
+			
+			$link_url_start = 'http://lingvopro.abbyyonline.com/Translate/' . $lang_from . '-'. $lang_to .'/';
+			$link_url_end = '';					
+			break;
+		case 'dictionary':
+			$link_url_start = 'http://dictionary.reference.com/browse/';
+			$link_url_end = '';					
+			break;
+		case 'thefreedictionary':
+			$link_url_start = 'http://www.thefreedictionary.com/';
+			$link_url_end = '';					
+			break;
+	}
+	
+	if($return_urls) {
+		$link_code = array(
+			'link_url_start' => $link_url_start,
+			'link_url_end' => $link_url_end,
+			'out_dict' => $out_dict);
+	}
+	else {
+		$link_code = l('', $link_url_start . $word . $link_url_end, array('attributes' => array('class' => array('dicts-icons', $out_dict))));
+	}	
+
+	return $link_code;
+}
+
+function _dictionaries_dict_multitran_encode($lang_code) {
+	switch($lang_code) {
+		case 'en':
+			$lang_code = 1;
+			break;
+		case 'ru':
+			$lang_code = 2;
+			break;
+		case 'de':
+			$lang_code = 1;
+			break;
+		case 'fr':
+			$lang_code = 4;
+			break;
+		case 'es':
+			$lang_code = 5;
+			break;
+		case 'it':
+			$lang_code = 23;
+			break;
+		case 'lv':
+			$lang_code = 27;
+			break;
+		case 'et':
+			$lang_code = 26;
+			break;
+		case 'ja':
+			$lang_code = 28;
+			break;				
+	}
+	
+	return $lang_code;
+}
+
+function _dictionaries_film_open_dicts($movie_nid) {
+	$dictsList = new FilmOpenDictionariesList($movie_nid);
+  return $dictsList->dictionaryOutput();
+}
+
+function _dictionaries_help($chapter) {
+	_filmui_add_metatags(null, 'dictionaries_help');
+	return _abcdhelp_film_help($chapter);
+}

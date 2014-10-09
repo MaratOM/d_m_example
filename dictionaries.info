@@ -1,0 +1,4 @@
+name = Dictionaries
+description = Film Dictionaries module.
+core = 7.x
+package = Films
